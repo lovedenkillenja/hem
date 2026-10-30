@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Hem">
+<meta name="theme-color" content="#0b0b0f">
+<meta name="robots" content="noindex">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<title>Hem</title>
+<link rel="stylesheet" href="mobil.css">
+<script>
+  // Inställningar kommer med i länken (#t=kanal&c=trakt-id) och sparas i telefonen.
+  (function () {
+    var h = location.hash.replace(/^#/, ""), p = {};
+    h.split("&").forEach(function (kv) { var a = kv.split("="); if (a[0]) p[a[0]] = decodeURIComponent(a[1] || ""); });
+    try {
+      if (p.t) localStorage.setItem("hem.remoteTopic", p.t);
+      if (p.c) {
+        var s = JSON.parse(localStorage.getItem("hem.settings.v1") || "{}");
+        s.traktClientId = p.c; localStorage.setItem("hem.settings.v1", JSON.stringify(s));
+      }
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+<header id="top">
+  <div class="brand">Hem</div>
+  <div class="tabs">
+    <button data-tab="browse" class="on">Bläddra</button>
+    <button data-tab="remote">Fjärr</button>
+  </div>
+  <button id="btn-settings" class="icon" aria-label="Inställningar">⚙</button>
+</header>
+
+<div id="now" class="hidden">
+  <div class="now-info"><div id="now-title"></div><div id="now-sub"></div></div>
+  <div class="now-btns">
+    <button data-key="rew" aria-label="Bakåt 10 s">↺10</button>
+    <button data-key="toggle" id="now-toggle" aria-label="Paus">❚❚</button>
+    <button data-key="fwd" aria-label="Framåt 30 s">30↻</button>
+  </div>
+  <div id="now-bar"><i></i></div>
+</div>
+
+<main id="browse" class="tab on">
+  <div class="search"><input id="q" type="search" placeholder="Sök film eller serie…" autocomplete="off"></div>
+  <button id="btn-tonight" class="wide-btn">🎲  Vad ska jag se ikväll?</button>
+  <div id="rows"></div>
+  <p id="status" class="dim center"></p>
+</main>
+
+<main id="remote" class="tab">
+  <div class="pad">
+    <button data-key="up" class="k up">▲</button>
+    <button data-key="left" class="k left">◀</button>
+    <button data-key="ok" class="k ok">OK</button>
+    <button data-key="right" class="k right">▶</button>
+    <button data-key="down" class="k down">▼</button>
+  </div>
+  <div class="row-btns">
+    <button data-key="back">↩ Tillbaka</button>
+    <button data-cmd="home">⌂ Hem</button>
+    <button data-cmd="tonight">🎲 Ikväll</button>
+  </div>
+  <h3>Under filmen</h3>
+  <div class="row-btns">
+    <button data-key="rew">↺ 10 s</button>
+    <button data-key="toggle">❚❚ / ▶</button>
+    <button data-key="fwd">30 s ↻</button>
+  </div>
+  <div class="row-btns">
+    <button data-key="subs">Undertexter</button>
+    <button data-key="subdelay" data-s="-0.25">Text ¼ s tidigare</button>
+    <button data-key="subdelay" data-s="0.25">Text ¼ s senare</button>
+  </div>
+  <div class="row-btns">
+    <button data-key="stop">■ Stoppa</button>
+  </div>
+  <h3>Appar på tv:n</h3>
+  <div class="row-btns wrap">
+    <button data-app="Stremio">Stremio</button>
+    <button data-app="YouTube">YouTube</button>
+    <button data-app="SVT Play">SVT Play</button>
+    <button data-app="Tele2 Play">Tele2 Play</button>
+    <button data-app="PS5">PS5</button>
+  </div>
+  <p class="dim small">Kommandona når tv:n när Hem är öppen där. Slå på tv:n med LG ThinQ-appen.</p>
+</main>
+
+<div id="sheet" class="hidden">
+  <div class="sheet-bg"></div>
+  <div class="sheet-card">
+    <div class="sheet-hero" id="s-hero"></div>
+    <div class="sheet-body">
+      <h2 id="s-title"></h2>
+      <div id="s-meta" class="dim"></div>
+      <p id="s-desc"></p>
+      <div id="s-btns" class="sheet-btns"></div>
+      <div id="s-seasons" class="chips"></div>
+      <div id="s-eps"></div>
+    </div>
+    <button id="s-close" class="icon close" aria-label="Stäng">✕</button>
+  </div>
+</div>
+
+<div id="settings" class="hidden">
+  <div class="sheet-bg"></div>
+  <div class="sheet-card small">
+    <div class="sheet-body">
+      <h2>Inställningar</h2>
+      <div id="set-list"></div>
+    </div>
+    <button id="set-close" class="icon close" aria-label="Stäng">✕</button>
+  </div>
+</div>
+
+<div id="toast" class="hidden"></div>
+
+<script src="config.js"></script>
+<script src="api.js"></script>
+<script src="imdbdata.js"></script>
+<script src="lists.js"></script>
+<script src="library.js"></script>
+<script src="mobil.js"></script>
+</body>
+</html>
