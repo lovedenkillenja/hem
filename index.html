@@ -19,9 +19,11 @@
     h.split("&").forEach(function (kv) { var a = kv.split("="); if (a[0]) p[a[0]] = decodeURIComponent(a[1] || ""); });
     try {
       if (p.t) localStorage.setItem("hem.remoteTopic", p.t);
-      if (p.c) {
+      if (p.c || p.r) {
         var s = JSON.parse(localStorage.getItem("hem.settings.v1") || "{}");
-        s.traktClientId = p.c; localStorage.setItem("hem.settings.v1", JSON.stringify(s));
+        if (p.c) s.traktClientId = p.c;
+        if (p.r) s.realDebridKey = p.r;   // sparas bara i telefonen, finns aldrig i filerna på GitHub
+        localStorage.setItem("hem.settings.v1", JSON.stringify(s));
       }
     } catch (e) {}
   })();
@@ -79,6 +81,10 @@
     <button data-key="subdelay" data-s="0.25">Text ¼ s senare</button>
   </div>
   <div class="row-btns">
+    <button data-key="subsize" data-s="-1">A− Mindre text</button>
+    <button data-key="subsize" data-s="1">A+ Större text</button>
+  </div>
+  <div class="row-btns">
     <button data-key="stop">■ Stoppa</button>
   </div>
   <h3>Appar på tv:n</h3>
@@ -125,6 +131,7 @@
 <script src="api.js"></script>
 <script src="imdbdata.js"></script>
 <script src="lists.js"></script>
+<script src="streams.js"></script>
 <script src="library.js"></script>
 <script src="mobil.js"></script>
 </body>

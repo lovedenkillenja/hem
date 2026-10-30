@@ -5,7 +5,8 @@ var CONFIG_LOCAL = {
   realDebridKey: "",
   traktClientId: "",
   traktClientSecret: "",
-  remoteTopic: ""           // hemlig kanal för mobilappen (sätts av installationsskriptet)
+  remoteTopic: "",          // hemlig kanal för mobilappen (sätts av installationsskriptet)
+  customLists: []           // egna Trakt-listor från listor.txt
 };
 
 var DEFAULTS = {
@@ -16,7 +17,10 @@ var DEFAULTS = {
   minRating: 7.0,             // dölj förslag under detta IMDb-betyg (0 = visa allt)
   hideSeen: true,             // dölj filmer du redan sett i förslagsraderna
   subMode: "auto",            // "auto" = engelska, men svenska för svenskspråkiga filmer; "eng" eller "swe" = alltid
-  subSize: 2,                 // undertextstorlek 1–4
+  subSize: 3,                 // undertextstorlek 1–7
+  autoNext: true,            // starta nästa avsnitt automatiskt (även när eftertexterna börjar)
+  autoSkipIntro: false,      // hoppa över intro/sammanfattning automatiskt (annars visas en knapp)
+  seekPreview: true,         // liten förhandsbild när man spolar
   subsOnByDefault: true,     // slå på bästa undertexten (svenska före engelska) automatiskt
   ps5Hdmi: 1,                 // vilken HDMI-ingång PS5:an sitter i
   // Appar i toppraden. id fylls i automatiskt om tv:n tillåter det,

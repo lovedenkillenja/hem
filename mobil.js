@@ -26,7 +26,8 @@
   function showNow(st) {
     now = st;
     var box = $("now");
-    if (!st || !st.playing || Date.now() - (st.at || 0) > 3 * 3600 * 1000) { box.classList.add("hidden"); return; }
+    // Tv:n skickar ett livstecken var 30:e sekund; uteblir det är tv:n avstängd eller filmen stängd
+    if (!st || !st.playing || Date.now() - (st.at || 0) > 75 * 1000) { box.classList.add("hidden"); return; }
     var p = st.playing;
     box.classList.remove("hidden");
     $("now-title").textContent = p.name + (p.season ? " · " + epCode(p.season, p.episode) : "");
@@ -46,7 +47,8 @@
       var es = new EventSource("https://ntfy.sh/" + topic + "-s/sse");
       es.onmessage = function (e) { try { var d = JSON.parse(e.data); if (d.event === "message") showNow(JSON.parse(d.message)); } catch (x) {} };
     } catch (e) {}
-    setInterval(function () { if (now) showNow(now); }, 15000);
+    setInterval(function () { if (now) showNow(now); }, 10000);
+    document.addEventListener("visibilitychange", function () { if (!document.hidden && now) showNow(now); });
   }
 
   /* ---------- Rader ---------- */
@@ -184,10 +186,38 @@
     return ((sheetMeta && sheetMeta.videos) || []).filter(function (v) { return v.season > 0; })
       .sort(function (a, b) { return a.season - b.season || a.episode - b.episode; });
   }
+  /* ---------- Titta i telefonen (via VLC eller Infuse) ---------- */
+  var PLAYERS = {
+    vlc: { name: "VLC", url: function (u) { return "vlc-x-callback://x-callback-url/stream?url=" + encodeURIComponent(u); } },
+    infuse: { name: "Infuse", url: function (u) { return "infuse://x-callback-url/play?url=" + encodeURIComponent(u); } }
+  };
+  function player() { return PLAYERS[Settings.get("phonePlayer")] || PLAYERS.vlc; }
+  function phoneSources(item) {
+    if (!Settings.get("realDebridKey")) { toast("Öppna den nya länken från installationen så kopplas Real-Debrid till telefonen", 4000); return; }
+    $("s-eps").innerHTML = '<p class="dim">Hämtar källor…</p>'; $("s-seasons").innerHTML = "";
+    $("s-eps").scrollIntoView({ behavior: "smooth", block: "start" });
+    Streams.fetchFor(item).then(function (list) {
+      // Telefonens spelare klarar alla ljudformat; föredra 1080p för att spara mobildata
+      var good = list.filter(function (s) { return s.cached && !s.junk; })
+        .sort(function (a, b) { return ((a.res > 1080) - (b.res > 1080)) || (b.res - a.res) || (a.sizeGB - b.sizeGB); }).slice(0, 8);
+      var box = $("s-eps"); box.innerHTML = "<h3 style=\"font-size:15px;margin:6px 0\">Spela i " + player().name + "</h3>";
+      if (!good.length) { box.innerHTML += '<p class="dim">Hittade inga direktspelbara källor.</p>'; return; }
+      good.forEach(function (s, i) {
+        var row = document.createElement("div"); row.className = "ep";
+        row.innerHTML = '<span class="t">' + (i === 0 ? "⭐ " : "") + esc(s.label) + ' <span class="dim small">' + (s.sizeGB ? s.sizeGB.toFixed(1) + " GB" : "") + "</span></span>";
+        var b = document.createElement("button"); b.textContent = "▶ Spela";
+        b.onclick = function () { location.href = player().url(s.url); };
+        row.appendChild(b); box.appendChild(row);
+      });
+      box.insertAdjacentHTML("beforeend", '<p class="dim small" style="margin-top:8px">Undertexter väljer du i ' + player().name + '. Real-Debrid tillåter bara en ström åt gången per IP-adress – titta inte i telefonen och på tv:n från olika nätverk samtidigt.</p>');
+    }).catch(function (e) { $("s-eps").innerHTML = '<p class="dim">' + esc(e.message || "Kunde inte hämta källor") + "</p>"; });
+  }
+
   function buildSheet() {
     var it = sheetItem; $("s-btns").innerHTML = "";
     if (it.type === "movie") {
       btn("▶  Spela på tv:n", function () { send({ c: "play", item: slim(it) }, "Startar på tv:n…"); closeSheet(); }, true);
+      btn("📱  Titta i telefonen", function () { phoneSources(it); });
       btn("Öppna på tv:n", function () { send({ c: "open", item: slim(it) }, "Öppnad på tv:n"); closeSheet(); });
     } else {
       var eps = episodes(), target = it.season ? { season: it.season, episode: it.episode } :
@@ -195,6 +225,9 @@
       if (target) btn("▶  " + epCode(target.season, target.episode) + " på tv:n", function () {
         send({ c: "play", item: slim({ type: "series", id: it.id, name: it.name, trakt: it.trakt, season: target.season, episode: target.episode }) }, "Startar på tv:n…"); closeSheet();
       }, true);
+      if (target) btn("📱  " + epCode(target.season, target.episode) + " i telefonen", function () {
+        phoneSources({ type: "series", id: it.id, name: it.name, season: target.season, episode: target.episode });
+      });
       btn("Öppna på tv:n", function () { send({ c: "open", item: slim(it) }, "Öppnad på tv:n"); closeSheet(); });
     }
     if (Trakt.connected()) {
@@ -225,7 +258,9 @@
           send({ c: "play", item: slim({ type: "series", id: it.id, name: it.name, trakt: it.trakt, season: v.season, episode: v.episode, epTitle: v.name }) }, "Startar " + epCode(v.season, v.episode) + " på tv:n…");
           closeSheet();
         };
-        row.appendChild(b); box.appendChild(row);
+        var b2 = document.createElement("button"); b2.textContent = "📱"; b2.style.marginLeft = "6px";
+        b2.onclick = function () { phoneSources({ type: "series", id: it.id, name: it.name, season: v.season, episode: v.episode }); };
+        row.appendChild(b); row.appendChild(b2); box.appendChild(row);
       });
     }
     draw();
@@ -306,6 +341,10 @@
     });
     row("Dölj filmer jag sett", "", Settings.get("hideSeen") !== false ? "På" : "Av", function () { Settings.set("hideSeen", Settings.get("hideSeen") === false); drawSettings(); build(); });
     row("Koppling till tv:n", topic ? "Klar ✓" : "Saknas – öppna länken från installationen", null);
+    row("Spelare i telefonen", "Installera gratisappen VLC (eller Infuse) från App Store", player().name, function () {
+      Settings.set("phonePlayer", Settings.get("phonePlayer") === "infuse" ? "vlc" : "infuse"); drawSettings();
+    });
+    row("Real-Debrid i telefonen", Settings.get("realDebridKey") ? "Klar ✓" : "Saknas – öppna den senaste länken från installationen", null);
   }
   function traktLogin() {
     if (!Settings.get("traktClientId")) { traktMsg = "Öppna länken från installationen först."; drawSettings(); return; }

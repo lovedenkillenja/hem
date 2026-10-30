@@ -18,6 +18,7 @@ var Settings = (function () {
   // Ändrade standardval i nya versioner
   if ((s._v || 0) < 2) { s.subsOnByDefault = true; if (s.minRating == null) s.minRating = 7; if (s.hideSeen == null) s.hideSeen = true; s._v = 2; save(); }
   if (s._v < 3) { s.subMode = "auto"; delete s.subLangs; s._v = 3; save(); }
+  if (s._v < 4) { s.subSize = 3; s._v = 4; save(); }
   return { get: function (k) { return s[k]; }, set: function (k, v) { s[k] = v; save(); }, all: s, save: save };
 })();
 
@@ -74,6 +75,26 @@ var Cinemeta = (function () {
   }
 
   return { catalog: catalog, meta: meta, search: search };
+})();
+
+/* ---------- Intro, sammanfattning och eftertexter (IntroDB, gemenskapsdata) ---------- */
+var Segments = (function () {
+  var cache = {};
+  function get(item) {
+    var key = item.type === "movie" ? item.id : item.id + ":" + item.season + ":" + item.episode;
+    if (key in cache) return Promise.resolve(cache[key]);
+    var q = item.type === "movie" ? "imdb_id=" + item.id + "&is_movie=true"
+      : "imdb_id=" + item.id + "&season=" + item.season + "&episode=" + item.episode;
+    return http("https://api.introdb.app/segments?" + q, { timeout: 6000 }).then(function (r) {
+      var out = {};
+      ["intro", "recap", "outro"].forEach(function (k) {
+        var s = r && r[k];
+        if (s && s.end_sec > s.start_sec) out[k] = { start: s.start_sec, end: s.end_sec };
+      });
+      cache[key] = out; return out;
+    }).catch(function () { cache[key] = {}; return {}; });
+  }
+  return { get: get };
 })();
 
 var Img = {
@@ -311,6 +332,30 @@ var Trakt = (function () {
       return (l || []).map(function (x) { return x.list; }).filter(Boolean);
     });
   }
+  // Regissör(er) för en film och vad de regisserat
+  function directors(imdb) {
+    return req("/movies/" + imdb + "/people").then(function (r) {
+      return ((r && r.crew && r.crew.directing) || []).filter(function (c) { return (c.jobs || [c.job]).indexOf("Director") >= 0; })
+        .map(function (c) { return { name: c.person.name, slug: c.person.ids.slug }; });
+    });
+  }
+  function directedBy(slug) {
+    return req("/people/" + slug + "/movies").then(function (r) {
+      return ((r && r.crew && r.crew.directing) || []).filter(function (c) { return (c.jobs || [c.job]).indexOf("Director") >= 0 && c.movie && c.movie.ids && c.movie.ids.imdb; })
+        .map(function (c) { return { type: "movie", id: c.movie.ids.imdb, name: c.movie.title, year: c.movie.year }; });
+    });
+  }
+  // Egen lista från en Trakt-länk: trakt.tv/users/<namn>/lists/<lista>
+  function listFromUrl(url) {
+    var m = String(url).match(/users\/([^\/]+)\/lists\/([^\/?#]+)/);
+    if (!m) return Promise.reject(new Error("Okänd länk"));
+    return req("/users/" + m[1] + "/lists/" + m[2] + "/items?limit=300").then(function (l) {
+      return (l || []).map(function (x) {
+        var o = x.movie || x.show; if (!o || !o.ids || !o.ids.imdb) return null;
+        return { type: x.movie ? "movie" : "series", id: o.ids.imdb, name: o.title, year: o.year };
+      }).filter(Boolean);
+    });
+  }
   function addHistory(item) { return req("/sync/history", { method: "POST", body: idsBody(item) }); }
   function removePlayback(id) { return req("/sync/playback/" + id, { method: "DELETE" }); }
   function rate(item, rating) {
@@ -324,5 +369,6 @@ var Trakt = (function () {
     watchedEpisodes: watchedEpisodes, lookupShow: lookupShow, scrobble: scrobble, addToWatchlist: addToWatchlist,
     watchedMovies: watchedMovies, myRatings: myRatings, related: related, calendar: calendar,
     listItems: listItems, listItemsById: listItemsById, searchLists: searchLists,
-    addHistory: addHistory, removePlayback: removePlayback, rate: rate, language: language };
+    addHistory: addHistory, removePlayback: removePlayback, rate: rate, language: language,
+    directors: directors, directedBy: directedBy, listFromUrl: listFromUrl };
 })();
