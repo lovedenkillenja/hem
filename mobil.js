@@ -192,24 +192,40 @@
     infuse: { name: "Infuse", url: function (u) { return "infuse://x-callback-url/play?url=" + encodeURIComponent(u); } }
   };
   function player() { return PLAYERS[Settings.get("phonePlayer")] || PLAYERS.vlc; }
+  // Är det en dator (stor skärm och mus) visas "Titta på datorn" med spelare i webbläsaren
+  var isDesktop = window.matchMedia && window.matchMedia("(min-width: 900px) and (pointer: fine)").matches;
+  function tvPlaying() { return now && now.playing && Date.now() - (now.at || 0) < 75 * 1000; }
+
   function phoneSources(item) {
-    if (!Settings.get("realDebridKey")) { toast("Öppna den nya länken från installationen så kopplas Real-Debrid till telefonen", 4000); return; }
+    if (!Settings.get("realDebridKey")) { toast("Öppna den nya länken från installationen så kopplas Real-Debrid hit", 4000); return; }
+    if (tvPlaying() && !confirm("Tv:n spelar just nu (" + now.playing.name + ").\n\nReal-Debrid kan varna eller stänga av kontot om två olika nätverk strömmar samtidigt. Är du hemma på samma wifi som tv:n är det okej.\n\nVill du ändå starta?")) return;
     $("s-eps").innerHTML = '<p class="dim">Hämtar källor…</p>'; $("s-seasons").innerHTML = "";
     $("s-eps").scrollIntoView({ behavior: "smooth", block: "start" });
     Streams.fetchFor(item).then(function (list) {
       // Telefonens spelare klarar alla ljudformat; föredra 1080p för att spara mobildata
       var good = list.filter(function (s) { return s.cached && !s.junk; })
         .sort(function (a, b) { return ((a.res > 1080) - (b.res > 1080)) || (b.res - a.res) || (a.sizeGB - b.sizeGB); }).slice(0, 8);
-      var box = $("s-eps"); box.innerHTML = "<h3 style=\"font-size:15px;margin:6px 0\">Spela i " + player().name + "</h3>";
+      var box = $("s-eps"); box.innerHTML = "<h3 style=\"font-size:15px;margin:6px 0\">" + (isDesktop ? "Spela här i webbläsaren (synkas med Trakt) eller i IINA" : "Spela i " + player().name) + "</h3>";
       if (!good.length) { box.innerHTML += '<p class="dim">Hittade inga direktspelbara källor.</p>'; return; }
       good.forEach(function (s, i) {
         var row = document.createElement("div"); row.className = "ep";
         row.innerHTML = '<span class="t">' + (i === 0 ? "⭐ " : "") + esc(s.label) + ' <span class="dim small">' + (s.sizeGB ? s.sizeGB.toFixed(1) + " GB" : "") + "</span></span>";
-        var b = document.createElement("button"); b.textContent = "▶ Spela";
-        b.onclick = function () { location.href = player().url(s.url); };
-        row.appendChild(b); box.appendChild(row);
+        if (isDesktop) {
+          var bh = document.createElement("button"); bh.textContent = "▶ Spela här";
+          bh.onclick = function () { closeSheet(); browserPlay(item, s, good); };
+          var bi = document.createElement("button"); bi.textContent = "IINA"; bi.style.marginLeft = "6px";
+          bi.onclick = function () { location.href = "iina://weblink?url=" + encodeURIComponent(s.url); };
+          row.appendChild(bh); row.appendChild(bi);
+        } else {
+          var b = document.createElement("button"); b.textContent = "▶ Spela";
+          b.onclick = function () { location.href = player().url(s.url); };
+          row.appendChild(b);
+        }
+        box.appendChild(row);
       });
-      box.insertAdjacentHTML("beforeend", '<p class="dim small" style="margin-top:8px">Undertexter väljer du i ' + player().name + '. Real-Debrid tillåter bara en ström åt gången per IP-adress – titta inte i telefonen och på tv:n från olika nätverk samtidigt.</p>');
+      box.insertAdjacentHTML("beforeend", '<p class="dim small" style="margin-top:8px">' + (isDesktop
+        ? "Webbläsaren klarar inte alla filer (t.ex. vissa ljudformat). Blir det tyst eller svart: välj IINA, en gratis spelare för Mac från iina.io."
+        : "Undertexter väljer du i " + player().name + ".") + " Real-Debrid tillåter bara en ström åt gången per IP-adress.</p>");
     }).catch(function (e) { $("s-eps").innerHTML = '<p class="dim">' + esc(e.message || "Kunde inte hämta källor") + "</p>"; });
   }
 
@@ -217,7 +233,7 @@
     var it = sheetItem; $("s-btns").innerHTML = "";
     if (it.type === "movie") {
       btn("▶  Spela på tv:n", function () { send({ c: "play", item: slim(it) }, "Startar på tv:n…"); closeSheet(); }, true);
-      btn("📱  Titta i telefonen", function () { phoneSources(it); });
+      btn(isDesktop ? "💻  Titta på datorn" : "📱  Titta i telefonen", function () { phoneSources(it); });
       btn("Öppna på tv:n", function () { send({ c: "open", item: slim(it) }, "Öppnad på tv:n"); closeSheet(); });
     } else {
       var eps = episodes(), target = it.season ? { season: it.season, episode: it.episode } :
@@ -225,7 +241,7 @@
       if (target) btn("▶  " + epCode(target.season, target.episode) + " på tv:n", function () {
         send({ c: "play", item: slim({ type: "series", id: it.id, name: it.name, trakt: it.trakt, season: target.season, episode: target.episode }) }, "Startar på tv:n…"); closeSheet();
       }, true);
-      if (target) btn("📱  " + epCode(target.season, target.episode) + " i telefonen", function () {
+      if (target) btn((isDesktop ? "💻  " : "📱  ") + epCode(target.season, target.episode) + (isDesktop ? " på datorn" : " i telefonen"), function () {
         phoneSources({ type: "series", id: it.id, name: it.name, season: target.season, episode: target.episode });
       });
       btn("Öppna på tv:n", function () { send({ c: "open", item: slim(it) }, "Öppnad på tv:n"); closeSheet(); });
@@ -258,7 +274,7 @@
           send({ c: "play", item: slim({ type: "series", id: it.id, name: it.name, trakt: it.trakt, season: v.season, episode: v.episode, epTitle: v.name }) }, "Startar " + epCode(v.season, v.episode) + " på tv:n…");
           closeSheet();
         };
-        var b2 = document.createElement("button"); b2.textContent = "📱"; b2.style.marginLeft = "6px";
+        var b2 = document.createElement("button"); b2.textContent = isDesktop ? "💻" : "📱"; b2.style.marginLeft = "6px";
         b2.onclick = function () { phoneSources({ type: "series", id: it.id, name: it.name, season: v.season, episode: v.episode }); };
         row.appendChild(b); row.appendChild(b2); box.appendChild(row);
       });
@@ -267,6 +283,58 @@
   }
   function closeSheet() { $("sheet").classList.add("hidden"); sheetItem = null; }
   $("s-close").onclick = closeSheet; $("sheet").querySelector(".sheet-bg").onclick = closeSheet;
+
+  /* ---------- Spelare i webbläsaren (datorn) – sparar position och synkar med Trakt ---------- */
+  var bp = { item: null, saveT: null, ext: null };
+  var BV = $("bp-video");
+  function posKey(item) { return "hem.m.pos." + Streams.idFor(item); }
+  function browserPlay(item, stream, alts) {
+    bp.item = item; bp.stream = stream;
+    $("bp").classList.remove("hidden"); $("bp-msg").classList.add("hidden");
+    $("bp-title").textContent = item.name + (item.season ? " · " + epCode(item.season, item.episode) : "") + "  ·  " + stream.label;
+    BV.innerHTML = ""; BV.src = stream.url;
+    var saved = 0; try { saved = +localStorage.getItem(posKey(item)) || 0; } catch (e) {}
+    BV.onloadedmetadata = function () { if (saved > 30 && saved < BV.duration - 60) BV.currentTime = saved; };
+    BV.onplaying = function () { Trakt.scrobble("start", item, pct()); };
+    BV.onpause = function () { if (!BV.ended) Trakt.scrobble("pause", item, pct()); save(); };
+    BV.onended = function () { Trakt.scrobble("stop", item, 100); try { localStorage.removeItem(posKey(item)); } catch (e) {} };
+    BV.onerror = function () { fail(); };
+    clearInterval(bp.saveT); bp.saveT = setInterval(save, 15000);
+    setTimeout(function () { if (BV.readyState < 2 && !BV.error && !$("bp").classList.contains("hidden")) fail(true); }, 25000);
+    $("bp-iina").onclick = function () { location.href = "iina://weblink?url=" + encodeURIComponent(stream.url); };
+    loadSubsFor(item, stream);
+  }
+  function pct() { return BV.duration ? BV.currentTime / BV.duration * 100 : 0; }
+  function save() { if (bp.item && BV.duration && BV.currentTime > 30) try { localStorage.setItem(posKey(bp.item), String(Math.floor(BV.currentTime))); } catch (e) {} }
+  function fail(slow) {
+    $("bp-msg").innerHTML = (slow ? "Filmen startar inte i webbläsaren." : "Webbläsaren kan inte spela den här filen.") +
+      "<br>Tryck <b>Öppna i IINA</b> (gratis från iina.io) eller välj en annan källa.";
+    $("bp-msg").classList.remove("hidden");
+  }
+  function loadSubsFor(item, stream) {
+    var sel = $("bp-subs"); sel.innerHTML = '<option value="">Undertexter: av</option>';
+    Trakt.language(item).then(function (orig) { return Subs.list(item, stream, Subs.langsFor(orig)); }).then(function (subs) {
+      if (bp.item !== item) return;
+      subs.forEach(function (s, i) { var o = document.createElement("option"); o.value = i; o.textContent = s.name; sel.appendChild(o); });
+      sel.onchange = function () {
+        while (BV.firstChild) BV.removeChild(BV.firstChild);
+        if (sel.value === "") return;
+        var s = subs[+sel.value];
+        Subs.load(s).then(function (u) {
+          var t = document.createElement("track"); t.kind = "subtitles"; t.label = s.name; t.srclang = s.lang.slice(0, 2); t.src = u; t.default = true;
+          BV.appendChild(t); setTimeout(function () { if (t.track) t.track.mode = "showing"; }, 50);
+        });
+      };
+      if (subs.length && Settings.get("subsOnByDefault") !== false) { sel.value = "0"; sel.onchange(); }
+    }).catch(function () {});
+  }
+  function closePlayer() {
+    if (bp.item && BV.duration && !BV.ended) { save(); Trakt.scrobble("stop", bp.item, pct()); }
+    clearInterval(bp.saveT); BV.pause(); BV.removeAttribute("src"); BV.load(); bp.item = null;
+    $("bp").classList.add("hidden");
+  }
+  $("bp-close").onclick = closePlayer;
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && !$("bp").classList.contains("hidden") && !document.fullscreenElement) closePlayer(); });
 
   /* ---------- Ikväll ---------- */
   $("btn-tonight").onclick = function () {

@@ -84,3 +84,24 @@ button:active{opacity:.6}
 .set button{padding:8px 14px;border-radius:10px;background:#24242c;font-weight:600;font-size:14px;white-space:nowrap}
 
 #toast{position:fixed;left:50%;bottom:calc(30px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#2c2c36;padding:12px 18px;border-radius:12px;font-size:14px;z-index:30;max-width:90vw;text-align:center}
+
+/* Spelare i webbläsaren (datorn) */
+#bp{position:fixed;inset:0;z-index:40;background:#000;display:flex;flex-direction:column}
+#bp video{flex:1;width:100%;min-height:0;background:#000}
+#bp video::cue{background:transparent;color:#fff;font-size:28px;text-shadow:0 0 4px #000,2px 2px 3px #000,-2px -2px 3px #000}
+#bp-bar{display:flex;align-items:center;gap:10px;padding:10px 16px;background:#111}
+#bp-title{flex:1;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#bp-bar button,#bp-bar select{padding:8px 12px;border-radius:10px;background:#24242c;color:var(--fg);border:0;font:inherit;font-size:14px}
+#bp-msg{position:absolute;left:50%;top:40%;transform:translate(-50%,-50%);background:#1c1c24;padding:22px 26px;border-radius:14px;max-width:520px;text-align:center;line-height:1.5}
+
+/* Större skärmar (datorn) */
+@media (min-width: 900px){
+  body{max-width:1500px;margin:0 auto}
+  .card{width:150px}.card .img{width:150px;height:222px}
+  .card.wide{width:300px}.card.wide .img{width:300px;height:169px}
+  .row h3{font-size:20px}
+  .sheet-card{left:50%;transform:translateX(-50%);width:760px;bottom:auto;top:5vh;max-height:90vh;border-radius:18px}
+  .sheet-hero{height:300px}
+  #remote{max-width:520px;margin:0 auto}
+  .card:hover .img{outline:3px solid #fff;outline-offset:2px}
+}
