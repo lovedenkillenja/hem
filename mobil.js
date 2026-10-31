@@ -140,6 +140,7 @@
     return c;
   }
   function render(list) {
+    if (DESK && window.DeskUI) { DeskUI.render(list || rowsData, !!list); return; }
     var box = $("rows"); box.innerHTML = "";
     (list || rowsData).forEach(function (row) {
       var r = document.createElement("section"); r.className = "row";
@@ -584,5 +585,13 @@
   try { var snap = JSON.parse(localStorage.getItem(SNAP) || "null"); if (snap && snap.length) { rowsData = snap; render(); } } catch (e) {}
   build();
   if (!DESK) listenStatus();
-  window.HemMobil = { send: send, rows: function () { return rowsData; } };
+  // Mobilversionen öppnad på en dator: tipsa om datorversionen (egen spelare, ingen fjärrkontroll)
+  if (!DESK && isDesktop) {
+    var tip = document.createElement("div"); tip.className = "desk-tip";
+    tip.innerHTML = 'Det här är <b>mobilversionen</b> (styr tv:n). På datorn finns en egen version med inbyggd spelare: ' +
+      '<a href="http://127.0.0.1:8765">öppna Lflix för datorn</a> <span class="dim">(kör Uppdatera Lflix på Macen först)</span>';
+    $("browse").insertBefore(tip, $("browse").firstChild);
+  }
+  window.HemMobil = { send: send, rows: function () { return rowsData; }, openSheet: openSheet,
+    play: function (it) { phoneSources(Object.assign({}, it, { _auto: true })); }, rebuild: function () { render(); } };
 })();
