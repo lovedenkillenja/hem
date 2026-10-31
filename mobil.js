@@ -311,26 +311,108 @@
       "<br>Tryck <b>Öppna i IINA</b> (gratis från iina.io) eller välj en annan källa.";
     $("bp-msg").classList.remove("hidden");
   }
+  /* Undertexter i webbspelaren: språk + version (som på tv:n), storlek, synk och automatisk synk */
+  var MSIZES = { 1: 18, 2: 21, 3: 24, 4: 28, 5: 32, 6: 37, 7: 43 };
+  function mApplySize() {
+    var n = +Settings.get("subSize") || 3, st = document.getElementById("bp-cue-style");
+    if (!st) { st = document.createElement("style"); st.id = "bp-cue-style"; document.head.appendChild(st); }
+    st.textContent = "#bp video::cue{font-size:" + MSIZES[n] + "px;background:transparent}";
+  }
   function loadSubsFor(item, stream) {
-    var sel = $("bp-subs"); sel.innerHTML = '<option value="">Undertexter: av</option>';
-    Trakt.language(item).then(function (orig) { return Subs.list(item, stream, Subs.langsFor(orig)); }).then(function (subs) {
-      if (bp.item !== item) return;
-      subs.forEach(function (s, i) { var o = document.createElement("option"); o.value = i; o.textContent = s.name; sel.appendChild(o); });
-      sel.onchange = function () {
-        while (BV.firstChild) BV.removeChild(BV.firstChild);
-        if (sel.value === "") return;
-        var s = subs[+sel.value];
-        Subs.load(s).then(function (u) {
-          var t = document.createElement("track"); t.kind = "subtitles"; t.label = s.name; t.srclang = s.lang.slice(0, 2); t.src = u; t.default = true;
-          BV.appendChild(t); setTimeout(function () { if (t.track) t.track.mode = "showing"; }, 50);
+    var st = { subs: [], want: ["eng", "swe"], lang: null, idx: -1, off: 0, cues: null, picked: false, user: false };
+    bp.st = st;
+    var selL = $("bp-lang"), selV = $("bp-ver");
+    mApplySize();
+    function apply() {
+      if (!st.cues) return;
+      st.cues.forEach(function (c) { try { c.cue.startTime = Math.max(0, c.o0 + st.off); c.cue.endTime = Math.max(0.1, c.o1 + st.off); } catch (e) {} });
+    }
+    function show(i) {
+      while (BV.firstChild) BV.removeChild(BV.firstChild);
+      st.idx = i; st.cues = null;
+      if (i < 0) return;
+      var s = st.subs[i];
+      Subs.load(s).then(function (u) {
+        if (st.idx !== i || bp.st !== st) return;
+        var t = document.createElement("track"); t.kind = "subtitles"; t.label = s.name; t.srclang = s.lang.slice(0, 2); t.src = u; t.default = true;
+        t.addEventListener("load", function () {
+          var L = [], cues = t.track.cues;
+          for (var j = 0; j < cues.length; j++) L.push({ cue: cues[j], b0: cues[j].startTime, b1: cues[j].endTime, o0: cues[j].startTime, o1: cues[j].endTime });
+          st.cues = L; apply();
+          if (!s.match) autoSync(false);
         });
-      };
-      if (subs.length && Settings.get("subsOnByDefault") !== false) { sel.value = "0"; sel.onchange(); }
-    }).catch(function () {});
+        BV.appendChild(t); setTimeout(function () { if (t.track) t.track.mode = "showing"; }, 50);
+      }).catch(function () {});
+    }
+    function autoSync(loud) {
+      var s = st.subs[st.idx]; if (!s) return;
+      var ref = (st.all || []).filter(function (x) { return x.match && x !== s; })[0];
+      if (!ref) { if (loud) alert("Hittade ingen undertext gjord för filen att jämföra med. Använd −¼ s / +¼ s."); return; }
+      Promise.all([Subs.loadText(s), Subs.loadText(ref)]).then(function (t) {
+        var r = Subs.align(Subs.times(t[0]), Subs.times(t[1]));
+        if (!r) { if (loud) alert("Kunde inte synka automatiskt. Använd −¼ s / +¼ s."); return; }
+        // webbspelaren flyttar bara; takten justeras genom att räkna om varje rad
+        if (st.cues) st.cues.forEach(function (c) { c.o0 = c.b0 * r.a; c.o1 = c.b1 * r.a; });
+        st.off = Math.round(r.b * 100) / 100; apply();
+      });
+    }
+    function langs() {
+      var have = {}; st.subs.forEach(function (x) { have[x.lang] = (have[x.lang] || 0) + 1; });
+      return st.want.filter(function (l) { return true; }).map(function (l) { return { l: l, n: have[l] || 0 }; });
+    }
+    function fillLangs() {
+      var cur = st.lang;
+      selL.innerHTML = '<option value="">Undertexter: av</option>' + langs().map(function (x) {
+        return '<option value="' + x.l + '"' + (x.l === cur ? " selected" : "") + ">" + Subs.langName(x.l) + " (" + x.n + ")</option>";
+      }).join("");
+      fillVers();
+    }
+    function fillVers() {
+      var list = st.subs.map(function (x, i) { return { x: x, i: i }; }).filter(function (o) { return o.x.lang === st.lang; });
+      selV.innerHTML = list.map(function (o) {
+        var tag = o.x.match ? " · ✓ gjord för filen" : o.x.rel ? " · ✓ samma utgåva" : "";
+        return '<option value="' + o.i + '"' + (o.i === st.idx ? " selected" : "") + ">" + o.x.name + tag + (o.x.src && o.x.src !== "OpenSubtitles" ? " · " + o.x.src : "") + "</option>";
+      }).join("");
+      selV.style.display = list.length ? "" : "none";
+    }
+    selL.onchange = function () {
+      st.user = true; st.lang = selL.value || null;
+      var first = st.subs.map(function (x, i) { return { x: x, i: i }; }).filter(function (o) { return o.x.lang === st.lang; })[0];
+      show(first ? first.i : -1); fillVers();
+    };
+    selV.onchange = function () { st.user = true; show(+selV.value); };
+    $("bp-sm").onclick = function () { Subs.stepSize(-1); mApplySize(); };
+    $("bp-lg").onclick = function () { Subs.stepSize(1); mApplySize(); };
+    $("bp-early").onclick = function () { st.off = Math.round((st.off - 0.25) * 100) / 100; apply(); };
+    $("bp-late").onclick = function () { st.off = Math.round((st.off + 0.25) * 100) / 100; apply(); };
+    $("bp-auto").onclick = function () { autoSync(true); };
+    function autoPick(final) {
+      if (st.user || Settings.get("subsOnByDefault") === false) return;
+      for (var w = 0; w < st.want.length; w++) {
+        if (w > 0 && !final) break;
+        var l = st.want[w], best = -1;
+        st.subs.forEach(function (x, i) { if (x.lang === l && best < 0) best = i; }); // listan är redan sorterad: bäst först
+        if (best >= 0) { if (st.idx !== best && !(st.lang === l && st.idx >= 0 && w === 0)) { st.lang = l; show(best); } else st.lang = st.lang || l; return; }
+      }
+    }
+    function update(list) {
+      if (bp.st !== st) return;
+      var cur = st.subs[st.idx];
+      st.all = list;
+      st.subs = list.filter(function (x) { return st.want.indexOf(x.lang) >= 0; });
+      if (cur) st.idx = st.subs.indexOf(cur);
+      autoPick(false); fillLangs();
+    }
+    fillLangs();
+    Trakt.language(item).catch(function () { return ""; }).then(function (orig) {
+      st.want = Subs.langsFor(orig);
+      return Subs.search(item, stream, update);
+    }).then(function (list) { update(list); autoPick(true); fillLangs(); }).catch(function () {});
   }
   function closePlayer() {
     if (bp.item && BV.duration && !BV.ended) { save(); Trakt.scrobble("stop", bp.item, pct()); }
-    clearInterval(bp.saveT); BV.pause(); BV.removeAttribute("src"); BV.load(); bp.item = null;
+    clearInterval(bp.saveT); BV.pause(); BV.removeAttribute("src"); BV.load(); bp.item = null; bp.st = null;
+    while (BV.firstChild) BV.removeChild(BV.firstChild);
     $("bp").classList.add("hidden");
   }
   $("bp-close").onclick = closePlayer;
@@ -413,6 +495,31 @@
       Settings.set("phonePlayer", Settings.get("phonePlayer") === "infuse" ? "vlc" : "infuse"); drawSettings();
     });
     row("Real-Debrid i telefonen", Settings.get("realDebridKey") ? "Klar ✓" : "Saknas – öppna den senaste länken från installationen", null);
+    row("Felsökning", "Be tv:n skicka vad den ser (inga nycklar) och kopiera texten till Claude", "Be tv:n skicka", function () {
+      send({ c: "diag" }, "Skickat – hämtar svaret om några sekunder…"); setTimeout(loadDiag, 6000);
+    });
+    row("", "", "Visa senaste", loadDiag);
+    var ta = document.createElement("textarea"); ta.id = "diag-box"; ta.readOnly = true; ta.placeholder = "Här visas tv:ns felsökningsrapport"; ta.value = diagText;
+    box.appendChild(ta);
+    if (diagText) row("", "", "Kopiera", function () {
+      var t = $("diag-box"); t.select();
+      (navigator.clipboard ? navigator.clipboard.writeText(diagText) : Promise.reject()).then(function () { toast("Kopierat – klistra in i chatten med Claude"); })
+        .catch(function () { try { document.execCommand("copy"); toast("Kopierat"); } catch (e) { toast("Markera texten och kopiera"); } });
+    });
+  }
+  var diagText = "";
+  // Hämta tv:ns senaste felsökningsrapport från den privata kanalen (sparas där i några timmar)
+  function loadDiag() {
+    if (!topic) { toast("Mobilen är inte kopplad till tv:n"); return; }
+    fetch("https://ntfy.sh/" + topic + "-d/json?poll=1&since=12h").then(function (r) { return r.text(); }).then(function (t) {
+      var msgs = t.trim().split("\n").filter(Boolean).map(function (l) { try { return JSON.parse(l); } catch (e) { return null; } })
+        .filter(function (m) { return m && m.event === "message"; });
+      var m = msgs[msgs.length - 1];
+      if (!m) { toast("Ingen rapport än – tryck Be tv:n skicka (Hem måste vara öppen på tv:n)"); return; }
+      // Långa rapporter sparar ntfy som bifogad fil
+      return (m.attachment && m.attachment.url ? fetch(m.attachment.url).then(function (r) { return r.text(); }) : Promise.resolve(m.message || ""))
+        .then(function (txt) { diagText = txt; drawSettings(); toast("Rapport från " + new Date(m.time * 1000).toLocaleTimeString("sv-SE")); });
+    }).catch(function () { toast("Kunde inte hämta rapporten"); });
   }
   function traktLogin() {
     if (!Settings.get("traktClientId")) { traktMsg = "Öppna länken från installationen först."; drawSettings(); return; }
@@ -427,6 +534,12 @@
   $("btn-settings").onclick = function () { drawSettings(); $("settings").classList.remove("hidden"); };
   $("set-close").onclick = function () { $("settings").classList.add("hidden"); };
   $("settings").querySelector(".sheet-bg").onclick = $("set-close").onclick;
+
+  $("tv-search").onsubmit = function (e) {
+    e.preventDefault();
+    var q = $("tv-q").value.trim(); if (q.length < 2) return;
+    send({ c: "search", q: q }, "Söker på tv:n…"); $("tv-q").blur();
+  };
 
   /* ---------- Start ---------- */
   try { var snap = JSON.parse(localStorage.getItem(SNAP) || "null"); if (snap && snap.length) { rowsData = snap; render(); } } catch (e) {}

@@ -57,6 +57,7 @@
 </main>
 
 <main id="remote" class="tab">
+  <form id="tv-search" class="tv-search"><input id="tv-q" type="search" placeholder="Sök på tv:n…" autocomplete="off" enterkeyhint="search"><button type="submit">Sök</button></form>
   <div class="pad">
     <button data-key="up" class="k up">▲</button>
     <button data-key="left" class="k left">◀</button>
@@ -129,7 +130,13 @@
   <video id="bp-video" controls playsinline autoplay></video>
   <div id="bp-bar">
     <span id="bp-title"></span>
-    <select id="bp-subs" aria-label="Undertexter"></select>
+    <span id="bp-subctl">
+      <select id="bp-lang" aria-label="Undertextspråk"></select>
+      <select id="bp-ver" aria-label="Version"></select>
+      <button id="bp-sm" title="Mindre text">A−</button><button id="bp-lg" title="Större text">A+</button>
+      <button id="bp-early" title="Texten kommer för sent">−¼ s</button><button id="bp-late" title="Texten kommer för tidigt">+¼ s</button>
+      <button id="bp-auto" title="Synka mot en undertext som är gjord för filen">Synka</button>
+    </span>
     <button id="bp-iina">Öppna i IINA</button>
     <button id="bp-close">✕ Stäng</button>
   </div>
@@ -144,7 +151,22 @@
 <script src="lists.js"></script>
 <script src="streams.js"></script>
 <script src="subs.js"></script>
-<script src="library.js"></script>
-<script src="mobil.js"></script>
+<script>
+  // Din IMDb-data ligger krypterad på GitHub. Lås upp den med nyckeln från din personliga länk,
+  // och starta sedan appen (biblioteket läser IMDb-datan direkt när det laddas).
+  (function () {
+    function load(src, cb) { var e = document.createElement("script"); e.src = src; e.onload = cb; e.onerror = cb; document.body.appendChild(e); }
+    function start() { load("library.js", function () { load("mobil.js"); }); }
+    function b64(s) { var b = atob(s), u = new Uint8Array(b.length); for (var i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u; }
+    var topic = ""; try { topic = localStorage.getItem("hem.remoteTopic") || ""; } catch (e) {}
+    if (typeof IMDB_ENC === "undefined" || !topic || !window.crypto || !crypto.subtle) { start(); return; }
+    crypto.subtle.digest("SHA-256", new TextEncoder().encode("hem-imdb:" + topic))
+      .then(function (h) { return crypto.subtle.importKey("raw", h, "AES-GCM", false, ["decrypt"]); })
+      .then(function (k) { return crypto.subtle.decrypt({ name: "AES-GCM", iv: b64(IMDB_ENC.iv) }, k, b64(IMDB_ENC.data)); })
+      .then(function (buf) { IMDB_DATA = JSON.parse(new TextDecoder().decode(buf)); })
+      .catch(function () {})
+      .then(start);
+  })();
+</script>
 </body>
 </html>

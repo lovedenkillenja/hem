@@ -6,9 +6,11 @@ var CONFIG_LOCAL = {
   traktClientId: "",
   traktClientSecret: "",
   remoteTopic: "",          // hemlig kanal för mobilappen (sätts av installationsskriptet)
+  devToken: "",             // förnyar utvecklarläget direkt från tv:n (sätts av installationsskriptet, stannar på tv:n)
   customLists: []           // egna Trakt-listor från listor.txt
 };
 
+var HEM_VERSION = "1.5.0";
 var DEFAULTS = {
   realDebridKey: "",
   traktClientId: "",

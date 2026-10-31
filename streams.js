@@ -53,7 +53,6 @@ var Streams = (function () {
     // Remuxar på 50–90 GB kan hacka över wifi; föredra rimlig storlek
     if (st.sizeGB > 45) sc -= 150; else if (st.sizeGB > 25) sc -= 40;
     if (st.sizeGB > 0 && st.sizeGB < 0.4) sc -= 100;
-    if (st.swedish) sc += 15;
     return sc;
   }
 
