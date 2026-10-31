@@ -19,6 +19,7 @@ var Settings = (function () {
   if ((s._v || 0) < 2) { s.subsOnByDefault = true; if (s.minRating == null) s.minRating = 7; if (s.hideSeen == null) s.hideSeen = true; s._v = 2; save(); }
   if (s._v < 3) { s.subMode = "auto"; delete s.subLangs; s._v = 3; save(); }
   if (s._v < 4) { s.subSize = 3; s._v = 4; save(); }
+  if (s._v < 5) { s.seekPreview = false; s._v = 5; save(); } // förhandsbilden vid spolning fungerar inte på LG C5
   return { get: function (k) { return s[k]; }, set: function (k, v) { s[k] = v; save(); }, all: s, save: save };
 })();
 

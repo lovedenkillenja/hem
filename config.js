@@ -10,7 +10,7 @@ var CONFIG_LOCAL = {
   customLists: []           // egna Trakt-listor från listor.txt
 };
 
-var HEM_VERSION = "1.7.1";
+var HEM_VERSION = "1.8.0";
 var DEFAULTS = {
   realDebridKey: "",
   traktClientId: "",
@@ -22,7 +22,7 @@ var DEFAULTS = {
   subSize: 3,                 // undertextstorlek 1–7
   autoNext: true,            // starta nästa avsnitt automatiskt (även när eftertexterna börjar)
   autoSkipIntro: false,      // hoppa över intro/sammanfattning automatiskt (annars visas en knapp)
-  seekPreview: true,         // liten förhandsbild när man spolar
+  seekPreview: false,         // liten förhandsbild när man spolar
   subsOnByDefault: true,     // slå på bästa undertexten (svenska före engelska) automatiskt
   ps5Hdmi: 1,                 // vilken HDMI-ingång PS5:an sitter i
   // Appar i toppraden. id fylls i automatiskt om tv:n tillåter det,
