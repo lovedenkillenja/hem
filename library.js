@@ -204,3 +204,46 @@ var Collections = (function () {
   function reset() { cache = {}; Store.set(CUR_KEY, {}); Store.set(TOP_KEY, null); }
   return { curated: curated, top250: top250, reset: reset, onIdle: onIdle, busy: function () { return pending > 0; } };
 })();
+
+/* Historik: allt du sett, från alla enheter (Trakt) plus filmer du betygsatt på IMDb */
+var History = (function () {
+  var cache = null, at = 0;
+  var MON = ["jan", "feb", "mar", "apr", "maj", "jun", "jul", "aug", "sep", "okt", "nov", "dec"];
+  function load(force) {
+    if (cache && !force && Date.now() - at < 5 * 60 * 1000) return Promise.resolve(cache);
+    var tr = Trakt.connected() ? Trakt.history().catch(function () { return { list: [], ratings: {} }; }) : Promise.resolve({ list: [], ratings: {} });
+    return tr.then(function (r) {
+      var by = {};
+      r.list.forEach(function (x) { by[x.id] = x; });
+      (IMDB_DATA.rated || []).forEach(function (w) {
+        var id = w[0];
+        if (by[id]) { if (by[id].mine == null) by[id].mine = w[1]; return; }
+        by[id] = { type: w[3] === "series" ? "series" : "movie", id: id, name: w[5] || id, at: 0, plays: 0, mine: w[1], fromImdb: true };
+      });
+      Object.keys(by).forEach(function (id) { var e = by[id]; if (e.mine == null && r.ratings[id] != null) e.mine = r.ratings[id]; e.rating = Ratings.get(id) || e.rating; });
+      cache = Object.keys(by).map(function (k) { return by[k]; }); at = Date.now();
+      return cache;
+    });
+  }
+  var SORTS = [
+    { key: "recent", name: "Senast sedda", fn: function (a, b) { return b.at - a.at || (b.mine || 0) - (a.mine || 0); } },
+    { key: "mine", name: "Mitt betyg", fn: function (a, b) { return (b.mine || 0) - (a.mine || 0) || b.at - a.at; } },
+    { key: "imdb", name: "IMDb-betyg", fn: function (a, b) { return (Ratings.get(b.id) || 0) - (Ratings.get(a.id) || 0); } },
+    { key: "title", name: "A–Ö", fn: function (a, b) { return String(a.name).localeCompare(String(b.name), "sv"); } }
+  ];
+  function sorted(list, key, type) {
+    var s = SORTS.filter(function (x) { return x.key === key; })[0] || SORTS[0];
+    return list.filter(function (x) { return !type || x.type === type; }).slice().sort(s.fn);
+  }
+  function date(ms) { if (!ms) return ""; var d = new Date(ms), y = d.getFullYear(); return d.getDate() + " " + MON[d.getMonth()] + (y !== new Date().getFullYear() ? " " + y : ""); }
+  // Kort text som visas på kortet: när och ditt betyg
+  function note(x) {
+    var bits = [];
+    if (x.mine) bits.push("Ditt betyg " + x.mine);
+    if (x.at) bits.push(date(x.at) + (x.lastEp ? " · S" + x.lastEp.season + "E" + x.lastEp.episode : ""));
+    else if (x.fromImdb) bits.push("Betygsatt på IMDb");
+    return bits.join(" · ");
+  }
+  function forget() { cache = null; }
+  return { load: load, sorted: sorted, sorts: SORTS, note: note, date: date, forget: forget };
+})();

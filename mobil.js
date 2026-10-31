@@ -93,7 +93,8 @@
       var cont = r[0][0].map(function (x) { x.at = new Date(x.pausedAt).getTime(); return x; })
         .concat(r[0][1].map(function (x) { x.at = new Date(x.at).getTime(); return x; }))
         .sort(function (a, b) { return b.at - a.at; });
-      var seenC = {}; cont = cont.filter(function (x) { if (seenC[x.id]) return false; seenC[x.id] = 1; return true; });
+      var seenC = {}, hidC = {}; try { hidC = JSON.parse(localStorage.getItem("hem.m.hiddenContinue") || "{}"); } catch (e) {}
+      cont = cont.filter(function (x) { if (seenC[x.id] || (hidC[x.id] && hidC[x.id] >= x.at)) return false; seenC[x.id] = 1; return true; });
       add("continue", "Fortsätt titta", cont.slice(0, 20), true);
       var wl = {}, all = [];
       r[1].concat(mine).forEach(function (x) { if (!wl[x.id]) { wl[x.id] = 1; all.push(x); } });
@@ -133,7 +134,8 @@
       (r || len ? '<span class="rt">' + (r ? "★ " + (+r).toFixed(1) : "") + (r && len ? " · " : "") + len + "</span>" : "") +
       (!wide && Seen.has(it.id) ? '<span class="sn">✓</span>' : "") +
       (it.progress ? '<div class="bar"><i style="width:' + Math.min(100, it.progress).toFixed(0) + '%"></i></div>' : "") + "</div>" +
-      '<div class="name">' + esc(it.name) + (it.season ? " · " + epCode(it.season, it.episode) : "") + "</div>";
+      '<div class="name">' + esc(it.name) + (it.season ? " · " + epCode(it.season, it.episode) : "") + "</div>" +
+      (it.note ? '<div class="note">' + esc(it.note) + "</div>" : "");
     var img = c.firstChild;
     if (io) io.observe(img); else img.style.backgroundImage = "url('" + src + "')";
     c.onclick = function () { openSheet(it); };
@@ -473,6 +475,23 @@
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  /* ---------- Historik (allt du sett på alla enheter) ---------- */
+  var hb = $("btn-history");
+  if (hb) hb.onclick = function () {
+    $("status").textContent = "Hämtar historik…";
+    History.load(true).then(function (list) {
+      $("status").textContent = list.length ? "" : (Trakt.connected() ? "Ingen historik än" : "Koppla Trakt under ⚙ för att se din historik");
+      function items(key, type) { return History.sorted(list, key, type).slice(0, 150).map(function (x) { return { type: x.type, id: x.id, name: x.name, rating: Ratings.get(x.id), note: History.note(x) }; }); }
+      render([
+        { key: "h1", title: "Senast sedda", items: items("recent") },
+        { key: "h2", title: "Mitt högsta betyg", items: items("mine") },
+        { key: "h3", title: "Filmer A–Ö", items: items("title", "movie") },
+        { key: "h4", title: "Serier A–Ö", items: items("title", "series") }
+      ].filter(function (r) { return r.items.length; }));
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+  };
+
   /* ---------- Sök ---------- */
   var qt;
   $("q").addEventListener("input", function () {
@@ -528,6 +547,14 @@
       row("Undertextstorlek", "Ändras också direkt i spelaren", Subs.sizeName(), function () { Subs.cycleSize(); drawSettings(); });
       row("Undertextspråk", "Auto = engelska, men svenska för filmer på svenska", { auto: "Auto", eng: "Engelska", swe: "Svenska" }[Settings.get("subMode") || "auto"], function () {
         var m = ["auto", "eng", "swe"]; Settings.set("subMode", m[(m.indexOf(Settings.get("subMode") || "auto") + 1) % 3]); drawSettings();
+      });
+      row("Felsökning", "Kopierar en rapport om senaste uppspelningen (inga nycklar) som du kan klistra in till Claude", "Kopiera rapport", function () {
+        HemPlayer.report().then(function (txt) {
+          var ta = document.createElement("textarea"); ta.id = "diag-box"; ta.readOnly = true; ta.value = txt;
+          var old = $("diag-box"); if (old) old.remove(); box.appendChild(ta); ta.select();
+          (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject()).then(function () { toast("Rapporten är kopierad – klistra in den i chatten"); },
+            function () { try { document.execCommand("copy"); toast("Rapporten är kopierad"); } catch (e) { toast("Markera texten och kopiera"); } });
+        });
       });
       return;
     }

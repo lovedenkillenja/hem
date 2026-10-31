@@ -357,6 +357,26 @@ var Trakt = (function () {
       }).filter(Boolean);
     });
   }
+  // Allt du sett (Trakt-historik från alla enheter) + dina betyg, en rad per film/serie
+  function history() {
+    return Promise.all([
+      req("/sync/history?limit=1000").catch(function () { return []; }),
+      req("/sync/ratings").catch(function () { return []; })
+    ]).then(function (r) {
+      var by = {}, rat = {};
+      (r[1] || []).forEach(function (x) { var o = x.movie || x.show; if (o && o.ids && o.ids.imdb && (x.type === "movie" || x.type === "show")) rat[o.ids.imdb] = x.rating; });
+      (r[0] || []).forEach(function (x) {
+        var o = x.movie || x.show, at = new Date(x.watched_at).getTime();
+        if (!o || !o.ids || !o.ids.imdb) return;
+        var id = o.ids.imdb, e = by[id];
+        if (!e) e = by[id] = { type: x.movie ? "movie" : "series", id: id, name: o.title, year: o.year, trakt: o.ids.trakt, at: 0, plays: 0 };
+        e.plays++;
+        if (at > e.at) { e.at = at; if (x.episode) { e.lastEp = { season: x.episode.season, episode: x.episode.number, title: x.episode.title }; } }
+      });
+      Object.keys(rat).forEach(function (id) { if (by[id]) by[id].mine = rat[id]; });
+      return { list: Object.keys(by).map(function (k) { return by[k]; }), ratings: rat };
+    });
+  }
   function addHistory(item) { return req("/sync/history", { method: "POST", body: idsBody(item) }); }
   function removePlayback(id) { return req("/sync/playback/" + id, { method: "DELETE" }); }
   function rate(item, rating) {
@@ -365,7 +385,7 @@ var Trakt = (function () {
     return req("/sync/ratings", { method: "POST", body: b });
   }
 
-  return { connected: connected, deviceCode: deviceCode, pollToken: pollToken, logout: logout,
+  return { history: history, connected: connected, deviceCode: deviceCode, pollToken: pollToken, logout: logout,
     watchlist: watchlist, playback: playback, upNext: upNext, recommendations: recommendations,
     watchedEpisodes: watchedEpisodes, lookupShow: lookupShow, scrobble: scrobble, addToWatchlist: addToWatchlist,
     watchedMovies: watchedMovies, myRatings: myRatings, related: related, calendar: calendar,
