@@ -274,6 +274,7 @@
     }
     if (Trakt.connected()) {
       btn("+ Watchlist", function () { Trakt.addToWatchlist(it).then(function () { toast("Tillagd i watchlist"); }, function () { toast("Kunde inte nå Trakt"); }); });
+      if (DESK && window.DeskUI && DeskUI.rate) btn("★ Betygsätt", function () { DeskUI.rate(it); });
       if (it.type === "movie" && !Seen.has(it.id)) btn("✓ Sedd", function () {
         Seen.mark(it.id); Trakt.addHistory(it).catch(function () {}); toast("Markerad som sedd"); closeSheet(); render();
       });
