@@ -10,7 +10,7 @@ var CONFIG_LOCAL = {
   customLists: []           // egna Trakt-listor från listor.txt
 };
 
-var HEM_VERSION = "1.9.0";
+var HEM_VERSION = "2.0.0";
 var DEFAULTS = {
   realDebridKey: "",
   traktClientId: "",
