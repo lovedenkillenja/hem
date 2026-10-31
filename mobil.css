@@ -7,7 +7,8 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .dim{color:var(--dim)}.small{font-size:13px}.center{text-align:center;padding:24px 0}
 
 #top{position:sticky;top:0;z-index:10;display:flex;align-items:center;gap:12px;padding:calc(10px + env(safe-area-inset-top)) 16px 10px;background:rgba(11,11,15,.94);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
-.brand{font-weight:700;font-size:20px;color:var(--accent)}
+.brand{font-weight:900;font-size:21px;letter-spacing:-.3px;color:#fff}
+.brand .bl{color:var(--accent)}
 .tabs{display:flex;gap:4px;background:var(--card);border-radius:10px;padding:3px;margin-left:auto}
 .tabs button{padding:6px 14px;border-radius:8px;color:var(--dim);font-size:14px;font-weight:600}
 .tabs button.on{background:#2c2c36;color:var(--fg)}

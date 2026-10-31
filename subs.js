@@ -3,6 +3,20 @@
    filens OpenSubtitles-hash, storlek och filnamn med (samma sak som Stremio
    på datorn gör). SRT konverteras till WebVTT så att tv:ns spelare kan visa dem. */
 var Subs = (function () {
+  // Hjälptjänsten: på tv:n Hems webOS-tjänst, på datorn Hems lokala server. Den får göra det webbläsaren inte får.
+  var Svc = {
+    ok: function () { return !!window.HEM_DESKTOP || (typeof Luna !== "undefined" && Luna.onTV); },
+    call: function (m, p, t) {
+      if (window.HEM_DESKTOP) {
+        var ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+        var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, t || 30000);
+        return fetch("/api/svc/" + m, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(p || {}), signal: ctrl ? ctrl.signal : undefined })
+          .then(function (r) { return r.json(); })
+          .then(function (r) { clearTimeout(timer); if (!r || r.returnValue === false) throw r || {}; return r; }, function (e) { clearTimeout(timer); throw { errorText: "tidsgräns" }; });
+      }
+      return Luna.service(m, p, t);
+    }
+  };
   var BASE = "https://opensubtitles-v3.strem.io";
   var CHUNK = 65536;
 
@@ -25,10 +39,10 @@ var Subs = (function () {
   }
   function videoHash(url, knownSize) {
     if (typeof BigInt === "undefined") return Promise.resolve(null);
-    return webHash(url, knownSize).then(function (h) {
-      if (h || typeof Luna === "undefined" || !Luna.onTV) return h;
+    return (window.HEM_DESKTOP ? Promise.resolve(null) : webHash(url, knownSize)).then(function (h) {
+      if (h || !Svc.ok()) return h;
       // Webbläsaren får oftast inte läsa delar av Real-Debrids filer – låt Hems tjänst på tv:n räkna i stället
-      return Luna.service("hash", { url: url, size: knownSize || 0 }, 30000)
+      return Svc.call("hash", { url: url, size: knownSize || 0 }, 30000)
         .then(function (r) { return r && r.hash ? { hash: r.hash, size: r.size, via: "tjänst" } : null; })
         .catch(function (e) { lastHashErr = (e && e.errorText) || "tjänsten svarade inte"; return null; });
     });
@@ -37,8 +51,8 @@ var Subs = (function () {
   // Hämta JSON: först direkt, och om det misslyckas via tjänsten på tv:n
   function getJSON(url, timeout) {
     return http(url, { timeout: timeout }).catch(function (e) {
-      if (typeof Luna === "undefined" || !Luna.onTV) throw e;
-      return Luna.service("fetch", { url: url, timeout: 90000 }, 95000).then(function (r) { return JSON.parse(r.text); });
+      if (!Svc.ok()) throw e;
+      return Svc.call("fetch", { url: url, timeout: 90000 }, 95000).then(function (r) { return JSON.parse(r.text); });
     });
   }
   function webHash(url, knownSize) {
@@ -130,13 +144,13 @@ var Subs = (function () {
       .catch(function (e) { diag.all = /abort/i.test(String(e && (e.name || e.message))) ? "tidsgräns" : "fel"; return matched.then(emit); });
     // Andra källa: Podnapisi (via Hems tjänst på tv:n). Ger utgåvans namn, så vi kan hitta samma utgåva som filen.
     diag.pod = "–";
-    var pod = (typeof Luna !== "undefined" && Luna.onTV) ? podnapisi(item, stream, diag).then(function (list) {
+    var pod = Svc.ok() ? podnapisi(item, stream, diag).then(function (list) {
       list.forEach(function (s) { if (!seen[s.id]) { seen[s.id] = 1; out.push(s); } });
       emit();
     }) : Promise.resolve();
     // Tredje källa: YIFY Subtitles (bara filmer), också via tjänsten på tv:n
     diag.yify = "–";
-    var yify = (typeof Luna !== "undefined" && Luna.onTV && item.type === "movie") ? yifySearch(item, stream, diag).then(function (list) {
+    var yify = (Svc.ok() && item.type === "movie") ? yifySearch(item, stream, diag).then(function (list) {
       list.forEach(function (s) { if (!seen[s.id]) { seen[s.id] = 1; out.push(s); } });
       emit();
     }) : Promise.resolve();
@@ -145,7 +159,7 @@ var Subs = (function () {
 
   function yifySearch(item, stream, diag) {
     diag.yify = "letar";
-    return Luna.service("yify", { imdb: item.id }, 45000).then(function (r) {
+    return Svc.call("yify", { imdb: item.id }, 45000).then(function (r) {
       var list = ((r && r.subtitles) || []).map(function (x) {
         return { url: "yify:" + x.slug, host: x.host, lang: norm(x.lang), id: "yify" + x.slug, src: "YIFY", release: x.release, rel: relMatch(x.release, stream && stream.file) };
       });
@@ -161,7 +175,7 @@ var Subs = (function () {
     var want = (langsFor(diag.orig) || ["eng", "swe"]).map(function (l) { return POD_LANG[l]; }).filter(Boolean);
     return Cinemeta.meta(item.type === "movie" ? "movie" : "series", item.id).then(function (m) {
       var year = parseInt((m && (m.year || m.releaseInfo)) || "", 10) || 0;
-      return Luna.service("podnapisi", { title: (m && m.name) || item.name, year: item.type === "movie" ? year : 0,
+      return Svc.call("podnapisi", { title: (m && m.name) || item.name, year: item.type === "movie" ? year : 0,
         season: item.season || 0, episode: item.episode || 0, langs: want }, 60000);
     }).then(function (r) {
       var list = ((r && r.subtitles) || []).map(function (x) {
@@ -262,8 +276,8 @@ var Subs = (function () {
 
   function loadText(sub) {
     if (sub._text) return Promise.resolve(sub._text);
-    var p = /^pod:/.test(sub.url) ? Luna.service("podsub", { pid: sub.url.slice(4) }, 40000).then(function (r) { return r.text; })
-      : /^yify:/.test(sub.url) ? Luna.service("yifysub", { slug: sub.url.slice(5), host: sub.host }, 40000).then(function (r) { return r.text; })
+    var p = /^pod:/.test(sub.url) ? Svc.call("podsub", { pid: sub.url.slice(4) }, 40000).then(function (r) { return r.text; })
+      : /^yify:/.test(sub.url) ? Svc.call("yifysub", { slug: sub.url.slice(5), host: sub.host }, 40000).then(function (r) { return r.text; })
       : http(sub.url, { text: true, timeout: 15000 });
     return p.then(function (t) { sub._text = t; return t; });
   }
@@ -292,6 +306,6 @@ var Subs = (function () {
   function fontPx() { return SIZES[+Settings.get("subSize") || 3]; }
   function sizeName() { return (+Settings.get("subSize") || 3) + " av 7"; }
 
-  return { search: search, parseCues: parseCues, fontPx: fontPx, norm: norm, loadText: loadText, times: times, align: align, relMatch: relMatch, langName: langName, langsFor: langsFor,
+  return { svc: Svc, search: search, parseCues: parseCues, fontPx: fontPx, norm: norm, loadText: loadText, times: times, align: align, relMatch: relMatch, langName: langName, langsFor: langsFor,
     applySize: applySize, cycleSize: cycleSize, stepSize: stepSize, sizeName: sizeName, load: load, srtToVtt: srtToVtt, videoHash: videoHash };
 })();
